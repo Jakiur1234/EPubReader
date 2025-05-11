@@ -121,11 +121,13 @@
             <div id="single-page" class="flex-1 p-8 mx-auto max-w-4xl">
                 <div class="prose dark:prose-invert max-w-none">
                     <div id="chapter-content">
-                        @if ($initial_path)
-                            <!-- Content will be loaded here -->
-                        @else
-                            <p class="text-gray-600 text-center mt-10">No chapters available.</p>
-                        @endif
+                        <div class="book-content">
+                            @if ($initial_path)
+                                <!-- Content will be loaded here -->
+                            @else
+                                <p class="text-gray-600 text-center mt-10">No chapters available.</p>
+                            @endif
+                        </div>
                     </div>
                 </div>
             </div>

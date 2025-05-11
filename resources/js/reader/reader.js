@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const token = page.dataset.token;
     const initialPath = page.dataset.initialPath;
     const contentDiv = document.getElementById('chapter-content');
-    let currentBasePath = null; // Track the currently loaded file
+    let currentBasePath = null;
 
     function loadContent(path, retries = 2) {
         let basePath = path;
@@ -43,9 +43,7 @@ document.addEventListener('DOMContentLoaded', function() {
             body: JSON.stringify({ path: basePath, file_token: fileToken })
         })
         .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to store file token: ' + response.status);
-            }
+            if (!response.ok) throw new Error('Failed to store file token: ' + response.status);
             return response.json();
         })
         .then(data => {
@@ -67,9 +65,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify({ token: token, path: basePath, file_token: fileToken })
             })
             .then(response => {
-                if (!response.ok) {
-                    throw new Error('Failed to load content: ' + response.status);
-                }
+                if (!response.ok) throw new Error('Failed to load content: ' + response.status);
                 return response.text();
             })
             .then(html => {
@@ -80,16 +76,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (parseError) {
                     doc = parser.parseFromString(html, 'text/html');
                     parseError = doc.querySelector('parsererror');
-                    if (parseError) {
-                        throw new Error('Invalid content format');
-                    }
+                    if (parseError) throw new Error('Invalid content format');
                 }
 
                 if (html.includes('<h2>Content Not Found</h2>')) {
                     throw new Error('Server returned Content Not Found');
                 }
 
-                // Extract body content
                 let bodyContent = '';
                 let body = doc.querySelector('body');
                 if (body) {
@@ -106,13 +99,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
 
-                // Relax empty content check
                 if (!bodyContent) {
                     console.error('No body content extracted');
                     throw new Error('No valid body content found in response');
                 }
 
-                // Extract and inject styles
                 const styles = doc.querySelectorAll('style');
                 Array.from(styles).forEach(style => {
                     const styleElement = document.createElement('style');
@@ -120,7 +111,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.head.appendChild(styleElement);
                 });
 
-                // Process <link> tags for external CSS
                 const links = doc.querySelectorAll('link[rel="stylesheet"]');
                 Array.from(links).forEach(link => {
                     let cssPath = link.getAttribute('href');
@@ -150,9 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 body: JSON.stringify({ token: token, path: cssPath, file_token: cssFileToken })
                             })
                             .then(response => {
-                                if (!response.ok) {
-                                    throw new Error('Failed to load CSS: ' + response.status);
-                                }
+                                if (!response.ok) throw new Error('Failed to load CSS: ' + response.status);
                                 return response.text();
                             })
                             .then(css => {
@@ -175,11 +163,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 currentBasePath = basePath;
 
-                // Ensure DOM is updated before proceeding
+                // Ensure DOM updates and split content into pages
                 requestAnimationFrame(() => {
+                    splitContentIntoPages();
                     loadImages();
 
-                    // Restore scroll position
                     const bookContent = contentDiv.querySelector('.book-content');
                     if (bookContent) {
                         const savedScroll = localStorage.getItem(`scrollPosition_${bookId}_${basePath}`);
@@ -188,7 +176,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     }
 
-                    // Scroll to fragment if present
                     if (fragment) {
                         requestAnimationFrame(() => {
                             const element = document.getElementById(fragment);
@@ -213,10 +200,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (nextPath && nextPath !== basePath) {
                         loadContent(path, retries - 1);
                     } else {
-                        contentDiv.innerHTML = '<h2>Content Not Found</h2><p>The requested content is not available. Please try another chapter.</p>';
+                        contentDiv.innerHTML = '<h2>Content Not Found</h2><p>The requested content is not available.</p>';
                     }
                 } else {
-                    contentDiv.innerHTML = '<h2>Content Not Found</h2><p>The requested content is not available. Please try another chapter.</p>';
+                    contentDiv.innerHTML = '<h2>Content Not Found</h2><p>The requested content is not available.</p>';
                 }
             });
         })
@@ -230,6 +217,39 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    function splitContentIntoPages() {
+        const bookContent = document.querySelector('.book-content');
+        if (!bookContent) return;
+
+        const content = bookContent.innerHTML;
+        const words = content.split(' ');
+        let pageContent = '';
+        let pages = [];
+
+        words.forEach(word => {
+            const testContent = pageContent + word + ' ';
+            const tempDiv = document.createElement('div');
+            tempDiv.className = 'page';
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.visibility = 'hidden';
+            tempDiv.innerHTML = testContent;
+            document.body.appendChild(tempDiv);
+            if (tempDiv.scrollHeight > window.innerHeight) {
+                pages.push(pageContent.trim());
+                pageContent = word + ' ';
+            } else {
+                pageContent = testContent;
+            }
+            document.body.removeChild(tempDiv);
+        });
+
+        if (pageContent.trim() !== '') {
+            pages.push(pageContent.trim());
+        }
+
+        bookContent.innerHTML = pages.map(page => `<div class="page">${page}</div>`).join('');
+    }
+
     function loadImages() {
         if (!contentDiv || !contentDiv.innerHTML) {
             console.warn('Cannot load images: contentDiv is empty or not found');
@@ -237,9 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const images = contentDiv.getElementsByTagName('img');
-        if (!images || images.length === 0) {
-            return;
-        }
+        if (!images || images.length === 0) return;
 
         Array.from(images).forEach(img => {
             if (!img) {
@@ -261,9 +279,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     body: JSON.stringify({ token: token, path: imgPath, file_token: imgToken })
                 })
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Failed to load image: ' + response.status);
-                    }
+                    if (!response.ok) throw new Error('Failed to load image: ' + response.status);
                     return response.blob();
                 })
                 .then(blob => {
@@ -274,15 +290,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 .catch(error => {
                     console.error('Error loading image:', imgPath, error);
                     img.alt = 'Image failed to load';
-                    if (originalSrc) {
-                        img.src = originalSrc;
-                    }
+                    if (originalSrc) img.src = originalSrc;
                 });
             } else {
                 console.warn('Image missing data attributes:', { path: imgPath, token: imgToken, src: originalSrc });
             }
         });
     }
+
+    // Inject page styles
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+        .page {
+            max-width: 60vw;
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+    `;
+    document.head.appendChild(styleElement);
 
     document.querySelectorAll('a[data-path]').forEach(link => {
         link.addEventListener('click', function(e) {
