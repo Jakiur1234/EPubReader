@@ -1,240 +1,210 @@
-// DOM Elements
-const menuBtn = document.getElementById('menu-btn');
-const settingsBtn = document.getElementById('settings-btn');
-const sidebar = document.getElementById('sidebar');
-const settingsPanel = document.getElementById('settings-panel');
-const singlePage = document.getElementById('single-page');
-const dualPage = document.getElementById('dual-page');
-const readerContainer = document.getElementById('reader-container');
-const themeBtns = document.querySelectorAll('.theme-btn');
-const chapterTitle = document.getElementById('chapter-title');
-const chaptersList = document.getElementById('chapters-list').querySelectorAll('li');
-const fontIncreaseBtn = document.getElementById('font-increase');
-const fontDecreaseBtn = document.getElementById('font-decrease');
-const fontSizeDisplay = document.getElementById('font-size-display');
-const readingModeRadios = document.querySelectorAll('input[name="reading-mode"]');
-const fullscreenBtn = document.getElementById('fullscreen-btn');
-const prevBtn = document.getElementById('prev-btn');
-const nextBtn = document.getElementById('next-btn');
-const currentPageSpan = document.getElementById('current-page');
-const totalPagesSpan = document.getElementById('total-pages');
+const elements = {
+    menuBtn: document.getElementById('menu-btn'),
+    settingsBtn: document.getElementById('settings-btn'),
+    sidebar: document.getElementById('sidebar'),
+    settingsPanel: document.getElementById('settings-panel'),
+    singlePage: document.getElementById('single-page'),
+    readerContainer: document.getElementById('reader-container'),
+    themeBtns: document.querySelectorAll('.theme-btn'),
+    chapterTitle: document.getElementById('chapter-title'),
+    chaptersList: document.querySelectorAll('#chapters-list li'),
+    fontIncreaseBtn: document.getElementById('font-increase'),
+    fontDecreaseBtn: document.getElementById('font-decrease'),
+    fontSizeDisplay: document.getElementById('font-size-display'),
+    readingModeRadios: document.querySelectorAll('input[name="reading-mode"]'),
+    fullscreenBtn: document.getElementById('fullscreen-btn'),
+    prevBtn: document.getElementById('prev-btn'),
+    nextBtn: document.getElementById('next-btn'),
+    currentPageSpan: document.getElementById('current-chapter'),
+    dataContainer: document.querySelector('.data-container')
+};
 
-// State with localStorage defaults
-let state = {
+const state = {
     sidebarOpen: false,
     settingsOpen: false,
     theme: localStorage.getItem('theme') || 'light',
     fontSize: parseInt(localStorage.getItem('fontSize')) || 16,
     readingMode: localStorage.getItem('readingMode') || 'single',
     currentChapter: parseInt(localStorage.getItem('currentChapter')) || 1,
-    currentPage: parseInt(localStorage.getItem('currentPage')) || 1,
-    totalPages: 10
+    bookId: elements.dataContainer?.dataset.bookId || 'default',
+    scrollPositions: JSON.parse(localStorage.getItem(`scrollPositions_${elements.dataContainer?.dataset.bookId}`)) || {}
 };
 
-// Initialize
 function init() {
-    // Load saved settings
-    loadTheme();
-    loadFontSize();
-    loadReadingMode();
-    loadChapter(state.currentChapter);
-    updatePageDisplay();
-
-    // Set total pages (would normally come from EPUB)
-    totalPagesSpan.textContent = state.totalPages;
-
-    // Set up event listeners
+    loadSettings();
     setupEventListeners();
+    loadChapter(state.currentChapter, true);
 }
 
 function setupEventListeners() {
-    menuBtn.addEventListener('click', toggleSidebar);
-    settingsBtn.addEventListener('click', toggleSettingsPanel);
-    fullscreenBtn.addEventListener('click', toggleFullscreen);
-    prevBtn.addEventListener('click', goToPreviousPage);
-    nextBtn.addEventListener('click', goToNextPage);
+    elements.menuBtn.addEventListener('click', toggleSidebar);
+    elements.settingsBtn.addEventListener('click', toggleSettingsPanel);
+    elements.fullscreenBtn.addEventListener('click', toggleFullscreen);
+    elements.prevBtn.addEventListener('click', () => navigateChapter(-1));
+    elements.nextBtn.addEventListener('click', () => navigateChapter(1));
 
-    themeBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const theme = btn.dataset.theme;
-            changeTheme(theme);
-        });
-    });
+    elements.themeBtns.forEach(btn => 
+        btn.addEventListener('click', () => changeTheme(btn.dataset.theme))
+    );
 
-    chaptersList.forEach((chapter, index) => {
+    elements.chaptersList.forEach((chapter, index) => 
         chapter.addEventListener('click', () => {
             loadChapter(index + 1);
             if (state.sidebarOpen) toggleSidebar();
-        });
-    });
+        })
+    );
 
-    fontIncreaseBtn.addEventListener('click', () => {
-        if (state.fontSize < 24) {
-            state.fontSize += 2;
-            updateFontSize();
-            saveToLocalStorage('fontSize', state.fontSize);
-        }
-    });
+    elements.fontIncreaseBtn.addEventListener('click', () => adjustFontSize(2));
+    elements.fontDecreaseBtn.addEventListener('click', () => adjustFontSize(-2));
 
-    fontDecreaseBtn.addEventListener('click', () => {
-        if (state.fontSize > 12) {
-            state.fontSize -= 2;
-            updateFontSize();
-            saveToLocalStorage('fontSize', state.fontSize);
-        }
-    });
+    elements.readingModeRadios.forEach(radio => 
+        radio.addEventListener('change', e => updateReadingMode(e.target.value))
+    );
 
-    readingModeRadios.forEach(radio => {
-        radio.addEventListener('change', (e) => {
-            state.readingMode = e.target.value;
-            updateReadingMode();
-            saveToLocalStorage('readingMode', state.readingMode);
-        });
-    });
+    elements.readerContainer.addEventListener('scroll', debounce(saveScrollPosition, 100));
 }
 
-// Load functions
-function loadTheme() {
+function loadSettings() {
     changeTheme(state.theme);
-    // Highlight the current theme button
-    themeBtns.forEach(btn => {
-        if (btn.dataset.theme === state.theme) {
-            btn.classList.add('ring-2', 'ring-blue-500');
-        } else {
-            btn.classList.remove('ring-2', 'ring-blue-500');
-        }
-    });
-}
-
-function loadFontSize() {
-    fontSizeDisplay.textContent = `${state.fontSize}px`;
     updateFontSize();
-}
-
-function loadReadingMode() {
-    // Set the radio button
-    document.querySelector(`input[name="reading-mode"][value="${state.readingMode}"]`).checked = true;
-    updateReadingMode();
-}
-
-function loadChapter(chapterNumber) {
-    state.currentChapter = chapterNumber;
-    state.currentPage = 1; // Reset to first page when changing chapters
-    saveToLocalStorage('currentChapter', chapterNumber);
-    saveToLocalStorage('currentPage', 1);
-
-    // Update UI
+    updateReadingMode(state.readingMode);
     updatePageDisplay();
-    chapterTitle.textContent = `Chapter : ${chaptersList[chapterNumber - 1].textContent}`;
-
-    // Scroll to top
-    readerContainer.scrollTo(0, 0);
-
-    // In a real app, this would load the chapter content
-    console.log(`Loading chapter ${chapterNumber}`);
 }
 
-// Update functions
-function updateReadingMode() {
-    if (state.readingMode === 'single') {
-        singlePage.classList.remove('hidden');
-        dualPage.classList.add('hidden');
-        readerContainer.classList.remove('overflow-hidden');
+function loadChapter(chapterNumber, isInitial = false) {
+    state.currentChapter = chapterNumber;
+    saveToLocalStorage('currentChapter', chapterNumber);
+
+    const chapterEl = elements.chaptersList[chapterNumber - 1];
+    elements.chapterTitle.textContent = `Chapter: ${chapterEl.textContent}`;
+    updatePageDisplay();
+
+    // Trigger chapter content load
+    const scrollPos = state.scrollPositions[chapterNumber] || 0;
+    if (isInitial) {
+        setTimeout(() => {
+            console.log(`Triggering chapter ${chapterNumber} load`);
+            chapterEl.click();
+        }, 100); // Increased delay for reliability
+        // Wait for content to render before scrolling
+        waitForContentLoad(elements.readerContainer, () => {
+            console.log(`Scrolling to position ${scrollPos} for chapter ${chapterNumber}`);
+            elements.readerContainer.scrollTo(0, scrollPos);
+        });
     } else {
-        singlePage.classList.add('hidden');
-        dualPage.classList.remove('hidden');
-        readerContainer.classList.add('overflow-hidden');
+        chapterEl.click();
+        elements.readerContainer.scrollTo(0, scrollPos);
     }
+}
+
+function waitForContentLoad(container, callback) {
+    let attempts = 0;
+    const maxAttempts = 100; // Increased for more patience
+    let lastHeight = 0;
+    const checkContent = () => {
+        const currentHeight = container.scrollHeight;
+        console.log(`Checking content: attempt ${attempts}, height ${currentHeight}`);
+        // Check if content is loaded and height is stable
+        if ((currentHeight > 0 && currentHeight === lastHeight) || attempts >= maxAttempts) {
+            callback();
+        } else {
+            lastHeight = currentHeight;
+            attempts++;
+            requestAnimationFrame(checkContent);
+        }
+    };
+    requestAnimationFrame(checkContent);
+}
+
+function saveScrollPosition() {
+    state.scrollPositions[state.currentChapter] = elements.readerContainer.scrollTop;
+    saveToLocalStorage(`scrollPositions_${state.bookId}`, JSON.stringify(state.scrollPositions));
+}
+
+function updateReadingMode(mode = state.readingMode) {
+    state.readingMode = mode;
+    elements.singlePage.classList.toggle('hidden', mode !== 'single');
+    elements.readerContainer.classList.toggle('overflow-hidden', mode !== 'single');
+    saveToLocalStorage('readingMode', mode);
+    document.querySelector(`input[name="reading-mode"][value="${mode}"]`).checked = true;
 }
 
 function updateFontSize() {
-    const proseElements = document.querySelectorAll('.prose');
-    proseElements.forEach(el => {
+    document.querySelectorAll('.prose').forEach(el => {
         el.style.fontSize = `${state.fontSize}px`;
     });
-    fontSizeDisplay.textContent = `${state.fontSize}px`;
+    elements.fontSizeDisplay.textContent = `${state.fontSize}px`;
 }
 
 function updatePageDisplay() {
-    currentPageSpan.textContent = state.currentPage;
+    elements.currentPageSpan.textContent = `${state.currentChapter} of ${elements.chaptersList.length}`;
 }
 
-// Toggle functions
 function toggleSidebar() {
     state.sidebarOpen = !state.sidebarOpen;
-    if (state.sidebarOpen) {
-        sidebar.classList.remove('-translate-x-full');
-        if (state.settingsOpen) toggleSettingsPanel();
-    } else {
-        sidebar.classList.add('-translate-x-full');
-    }
+    elements.sidebar.classList.toggle('-translate-x-full', !state.sidebarOpen);
+    if (state.sidebarOpen && state.settingsOpen) toggleSettingsPanel();
 }
 
 function toggleSettingsPanel() {
     state.settingsOpen = !state.settingsOpen;
-    if (state.settingsOpen) {
-        settingsPanel.classList.remove('translate-x-full');
-        if (state.sidebarOpen) toggleSidebar();
-    } else {
-        settingsPanel.classList.add('translate-x-full');
-    }
+    elements.settingsPanel.classList.toggle('translate-x-full', !state.settingsOpen);
+    if (state.settingsOpen && state.sidebarOpen) toggleSidebar();
 }
 
-// Change functions
 function changeTheme(theme) {
     document.body.classList.remove(`theme-${state.theme}`);
     document.body.classList.add(`theme-${theme}`);
-
-    // Update theme buttons
-    themeBtns.forEach(btn => {
-        if (btn.dataset.theme === theme) {
-            btn.classList.add('ring-2', 'ring-blue-500');
-        } else {
-            btn.classList.remove('ring-2', 'ring-blue-500');
-        }
+    
+    elements.themeBtns.forEach(btn => {
+        btn.classList.toggle('ring-2', btn.dataset.theme === theme);
+        btn.classList.toggle('ring-blue-500', btn.dataset.theme === theme);
     });
 
     state.theme = theme;
     saveToLocalStorage('theme', theme);
 }
 
-// Navigation functions
-function goToPreviousPage() {
-    if (state.currentPage > 1) {
-        state.currentPage--;
-        saveToLocalStorage('currentPage', state.currentPage);
-        updatePageDisplay();
-        // In a real app, you would load the previous page content
-        readerContainer.scrollTo(0, 0);
+function navigateChapter(direction) {
+    const newChapter = state.currentChapter + direction;
+    if (newChapter >= 1 && newChapter <= elements.chaptersList.length) {
+        loadChapter(newChapter);
     }
 }
 
-function goToNextPage() {
-    if (state.currentPage < state.totalPages) {
-        state.currentPage++;
-        saveToLocalStorage('currentPage', state.currentPage);
-        updatePageDisplay();
-        // In a real app, you would load the next page content
-        readerContainer.scrollTo(0, 0);
+function adjustFontSize(change) {
+    const newSize = state.fontSize + change;
+    if (newSize >= 12 && newSize <= 24) {
+        state.fontSize = newSize;
+        updateFontSize();
+        saveToLocalStorage('fontSize', newSize);
     }
 }
 
 function toggleFullscreen() {
     if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {
-            console.error(`Error attempting to enable fullscreen: ${err.message}`);
-        });
-    } else {
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
-        }
+        document.documentElement.requestFullscreen().catch(err => 
+            console.error(`Error attempting to enable fullscreen: ${err.message}`)
+        );
+    } else if (document.exitFullscreen) {
+        document.exitFullscreen();
     }
 }
 
-// LocalStorage helper
 function saveToLocalStorage(key, value) {
     localStorage.setItem(key, value);
 }
 
-// Initialize the app
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
 init();

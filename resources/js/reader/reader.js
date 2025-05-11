@@ -15,36 +15,22 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentBasePath = null; // Track the currently loaded file
 
     function loadContent(path, retries = 2) {
-        // Extract fragment (e.g., #h.8cqz9on9ecp6) from path
         let basePath = path;
         let fragment = '';
         if (path.includes('#')) {
             [basePath, fragment] = path.split('#', 2);
         }
 
-        // If the base file is already loaded, just scroll to the fragment
         if (currentBasePath === basePath && contentDiv.innerHTML) {
-            console.log('Base file already loaded, scrolling to fragment:', fragment);
             if (fragment) {
                 requestAnimationFrame(() => {
                     const element = document.getElementById(fragment);
                     if (element) {
                         element.scrollIntoView({ behavior: 'smooth' });
-                        console.log('Scrolled to fragment:', fragment);
-                    } else {
-                        console.warn('Fragment not found:', fragment);
                     }
                 });
             }
             return;
-        }
-
-        // Save scroll position of the current chapter before loading a new one
-        if (currentBasePath) {
-            const bookContent = contentDiv.querySelector('.book-content');
-            if (bookContent) {
-                localStorage.setItem(`scrollPosition_${bookId}_${currentBasePath}`, bookContent.scrollTop);
-            }
         }
 
         const fileToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
@@ -57,7 +43,6 @@ document.addEventListener('DOMContentLoaded', function() {
             body: JSON.stringify({ path: basePath, file_token: fileToken })
         })
         .then(response => {
-            console.log('Store file token response:', response.status);
             if (!response.ok) {
                 throw new Error('Failed to store file token: ' + response.status);
             }
@@ -65,7 +50,6 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(data => {
             if (!data.success) {
-                console.error('Failed to store file token:', data.error);
                 if (retries > 0) {
                     loadContent(path, retries - 1);
                 } else {
@@ -83,31 +67,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify({ token: token, path: basePath, file_token: fileToken })
             })
             .then(response => {
-                console.log('Serve file response:', response.status, response.headers.get('Content-Type'));
                 if (!response.ok) {
                     throw new Error('Failed to load content: ' + response.status);
                 }
                 return response.text();
             })
             .then(html => {
-                console.log('Received HTML length:', html.length, 'Sample:', html.substring(0, 50));
-                // Parse HTML with DOMParser
                 const parser = new DOMParser();
                 let doc = parser.parseFromString(html, 'application/xhtml+xml');
                 let parseError = doc.querySelector('parsererror');
 
-                // Fallback to text/html if XHTML parsing fails
                 if (parseError) {
-                    console.warn('XHTML parsing failed:', parseError.textContent);
                     doc = parser.parseFromString(html, 'text/html');
                     parseError = doc.querySelector('parsererror');
                     if (parseError) {
-                        console.error('HTML parsing error:', parseError.textContent);
                         throw new Error('Invalid content format');
                     }
                 }
 
-                // Check for error message
                 if (html.includes('<h2>Content Not Found</h2>')) {
                     throw new Error('Server returned Content Not Found');
                 }
@@ -117,19 +94,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 let body = doc.querySelector('body');
                 if (body) {
                     bodyContent = body.innerHTML;
-                    console.log('Body content length:', bodyContent.length, 'Sample:', bodyContent.substring(0, 50));
                 } else {
-                    console.warn('No <body> tag found, attempting fallback');
                     const htmlElement = doc.querySelector('html');
                     if (htmlElement) {
                         const tempDiv = document.createElement('div');
                         tempDiv.append(...htmlElement.childNodes);
                         tempDiv.querySelectorAll('head, style, title').forEach(el => el.remove());
                         bodyContent = tempDiv.innerHTML;
-                        console.log('Fallback content length:', bodyContent.length, 'Sample:', bodyContent.substring(0, 50));
                     } else {
                         bodyContent = html;
-                        console.log('Last resort content length:', bodyContent.length, 'Sample:', bodyContent.substring(0, 50));
                     }
                 }
 
@@ -186,7 +159,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                 const styleElement = document.createElement('style');
                                 styleElement.textContent = css;
                                 document.head.appendChild(styleElement);
-                                console.log('Loaded CSS:', cssPath);
                             })
                             .catch(error => console.error('Failed to load CSS:', cssPath, error));
                         }
@@ -232,7 +204,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             })
             .catch(error => {
-                console.error('Error loading content:', path, error.message);
                 if (retries > 0) {
                     const fallbackPaths = document.querySelectorAll('a[data-path]');
                     let nextPath = null;
@@ -242,7 +213,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         nextPath = tocPaths[(currentIndex + 1) % tocPaths.length] || tocPaths[0];
                     }
                     if (nextPath && nextPath !== basePath) {
-                        console.log('Retrying with next TOC path:', nextPath);
                         loadContent(path, retries - 1);
                     } else {
                         contentDiv.innerHTML = '<h2>Content Not Found</h2><p>The requested content is not available. Please try another chapter.</p>';
@@ -321,7 +291,6 @@ document.addEventListener('DOMContentLoaded', function() {
         link.addEventListener('click', function(e) {
             e.preventDefault();
             const path = this.getAttribute('data-path');
-            console.log('Loading TOC path:', path);
             loadContent(path);
         });
     });

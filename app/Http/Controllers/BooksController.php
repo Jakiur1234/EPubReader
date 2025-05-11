@@ -307,11 +307,6 @@ class BooksController
         }
 
         if (!Session::has('epub_token_' . $id) || $request->input('token') !== Session::get('epub_token_' . $id)) {
-            Log::warning('Unauthorized access attempt', [
-                'book_id' => $id,
-                'token' => $request->input('token'),
-                'path' => $request->input('path'),
-            ]);
             abort(403, 'Unauthorized access');
         }
 
@@ -319,17 +314,11 @@ class BooksController
         $file_token = $request->input('file_token');
         $session_file_token_key = 'file_token_' . $id . '_' . $path;
         if (!Session::has($session_file_token_key) || $file_token !== Session::get($session_file_token_key)) {
-            Log::warning('Invalid or reused file token', [
-                'book_id' => $id,
-                'path' => $path,
-                'file_token' => $file_token,
-            ]);
             abort(403, 'Invalid file token');
         }
 
         Session::forget($session_file_token_key);
 
-        // Extract fragment (e.g., #h.8cqz9on9ecp6) from path
         $fragment = '';
         if (strpos($path, '#') !== false) {
             list($basePath, $fragment) = explode('#', $path, 2);
@@ -348,20 +337,10 @@ class BooksController
             }
             $reader->close();
         } catch (\Exception $e) {
-            Log::error('Error accessing EPUB file', [
-                'book_id' => $id,
-                'file' => $book->file_path,
-                'path' => $path,
-                'error' => $e->getMessage(),
-            ]);
             abort(500, 'Error accessing EPUB file: ' . $e->getMessage());
         }
 
         if ($content === null) {
-            Log::warning('Serving fallback content due to file not found', [
-                'book_id' => $id,
-                'path' => $path,
-            ]);
             $content = '<h2>Content Not Found</h2><p>The requested content is not available. Please try another chapter.</p>';
             return response($content, 200)
                 ->header('Content-Type', 'text/html')
@@ -380,14 +359,6 @@ class BooksController
         $extension = pathinfo($path, PATHINFO_EXTENSION);
         $mimeType = $this->getMimeType($extension);
 
-        Log::debug('Serving content snippet', [
-            'book_id' => $id,
-            'path' => $path,
-            'fragment' => $fragment,
-            'content_length' => strlen($content),
-            'content_start' => substr($content, 0, 50),
-        ]);
-
         if (in_array($extension, ['xhtml', 'html'])) {
             $dom = new DOMDocument();
             libxml_use_internal_errors(true);
@@ -400,23 +371,12 @@ class BooksController
             libxml_clear_errors();
 
             if (!$dom->documentElement) {
-                Log::warning('Failed to parse content for processing', [
-                    'book_id' => $id,
-                    'path' => $path,
-                ]);
                 $content = '<h2>Content Not Found</h2><p>Failed to parse the requested content.</p>';
                 $mimeType = 'text/html';
             } else {
                 // Process images
                 $images = $dom->getElementsByTagName('img');
                 $basePath = dirname($path) === '.' ? '' : dirname($path);
-                $imageCount = $images->length;
-
-                Log::debug('Processing images in HTML', [
-                    'book_id' => $id,
-                    'path' => $path,
-                    'image_count' => $imageCount,
-                ]);
 
                 foreach ($images as $img) {
                     $imgPath = $img->getAttribute('src');
@@ -424,12 +384,6 @@ class BooksController
                         $fullImgPath = $this->resolveRelativePath($basePath, $imgPath);
                         $imgToken = Str::random(32);
                         Session::put('file_token_' . $id . '_' . $fullImgPath, $imgToken);
-
-                        Log::debug('Generated image token', [
-                            'book_id' => $id,
-                            'image_path' => $fullImgPath,
-                            'image_token' => $imgToken,
-                        ]);
 
                         $img->setAttribute('data-img-path', $fullImgPath);
                         $img->setAttribute('data-img-token', $imgToken);
@@ -449,13 +403,11 @@ class BooksController
                 if ($head) {
                     $head->appendChild($style);
                 } else {
-                    // Create a head element if it doesn't exist
                     $head = $dom->createElement('head');
                     $dom->documentElement->insertBefore($head, $dom->getElementsByTagName('body')->item(0));
                     $head->appendChild($style);
                 }
 
-                // Preserve the full HTML document
                 if ($isXhtml) {
                     $content = $dom->saveXML();
                 } else {
@@ -463,10 +415,6 @@ class BooksController
                 }
             }
         }
-
-        Log::debug('Final content length', [
-            'content' => strlen($content),
-        ]);
 
         return response($content, 200)
             ->header('Content-Type', $mimeType)
@@ -497,12 +445,6 @@ class BooksController
         $path = $request->input('path');
         $file_token = $request->input('file_token');
         Session::put('file_token_' . $id . '_' . $path, $file_token);
-
-        Log::debug('Stored single-use file token', [
-            'book_id' => $id,
-            'path' => $path,
-            'file_token' => $file_token,
-        ]);
 
         return response()->json(['success' => true]);
     }
