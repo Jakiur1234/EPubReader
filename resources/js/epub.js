@@ -25,10 +25,14 @@ const state = {
     theme: localStorage.getItem('theme') || 'light',
     fontSize: parseInt(localStorage.getItem('fontSize')) || 16,
     readingMode: localStorage.getItem('readingMode') || 'single',
-    currentChapter: parseInt(localStorage.getItem('currentChapter')) || 1,
     bookId: elements.dataContainer?.dataset.bookId || 'default',
-    scrollPositions: JSON.parse(localStorage.getItem(`scrollPositions_${elements.dataContainer?.dataset.bookId}`)) || {}
+    currentChapter: null,
+    scrollPositions: null
 };
+
+// Initialize book-specific state
+state.scrollPositions = JSON.parse(localStorage.getItem(`scrollPositions_${state.bookId}`)) || {};
+state.currentChapter = parseInt(localStorage.getItem(`currentChapter_${state.bookId}`)) || 1;
 
 function init() {
     loadSettings();
@@ -73,23 +77,27 @@ function loadSettings() {
 
 function loadChapter(chapterNumber, isInitial = false) {
     state.currentChapter = chapterNumber;
-    saveToLocalStorage('currentChapter', chapterNumber);
+    saveToLocalStorage(`currentChapter_${state.bookId}`, chapterNumber);
 
     const chapterEl = elements.chaptersList[chapterNumber - 1];
     elements.chapterTitle.textContent = `Chapter: ${chapterEl.textContent}`;
     updatePageDisplay();
 
-    // Trigger chapter content load
     const scrollPos = state.scrollPositions[chapterNumber] || 0;
     if (isInitial) {
         setTimeout(() => {
-            console.log(`Triggering chapter ${chapterNumber} load`);
+            console.log(`Triggering chapter ${chapterNumber} load for book ${state.bookId}`);
             chapterEl.click();
-        }, 100); // Increased delay for reliability
-        // Wait for content to render before scrolling
-        waitForContentLoad(elements.readerContainer, () => {
-            console.log(`Scrolling to position ${scrollPos} for chapter ${chapterNumber}`);
+        }, 100);
+        waitForContentLoad(elements.readerContainer, scrollPos, () => {
+            console.log(`Initial scroll to position ${scrollPos} for chapter ${chapterNumber} in book ${state.bookId}`);
             elements.readerContainer.scrollTo(0, scrollPos);
+            setTimeout(() => {
+                if (elements.readerContainer.scrollTop !== scrollPos) {
+                    console.log(`Retrying scroll to position ${scrollPos} for chapter ${chapterNumber}`);
+                    elements.readerContainer.scrollTo(0, scrollPos);
+                }
+            }, 500);
         });
     } else {
         chapterEl.click();
@@ -97,15 +105,23 @@ function loadChapter(chapterNumber, isInitial = false) {
     }
 }
 
-function waitForContentLoad(container, callback) {
+function waitForContentLoad(container, scrollPos, callback) {
     let attempts = 0;
-    const maxAttempts = 100; // Increased for more patience
+    const maxAttempts = 150;
+    let stableCount = 0;
+    const stableThreshold = 3;
     let lastHeight = 0;
+    const minHeight = 100;
     const checkContent = () => {
         const currentHeight = container.scrollHeight;
-        console.log(`Checking content: attempt ${attempts}, height ${currentHeight}`);
-        // Check if content is loaded and height is stable
-        if ((currentHeight > 0 && currentHeight === lastHeight) || attempts >= maxAttempts) {
+        console.log(`Checking content: attempt ${attempts}, height ${currentHeight}, stable count ${stableCount}`);
+        if (currentHeight >= minHeight && currentHeight === lastHeight) {
+            stableCount++;
+        } else {
+            stableCount = 0;
+        }
+        if ((stableCount >= stableThreshold || attempts >= maxAttempts) && currentHeight >= minHeight) {
+            console.log(`Content loaded: final height ${currentHeight}, scrollPos ${scrollPos}`);
             callback();
         } else {
             lastHeight = currentHeight;

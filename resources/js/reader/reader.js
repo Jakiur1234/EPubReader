@@ -185,7 +185,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         const savedScroll = localStorage.getItem(`scrollPosition_${bookId}_${basePath}`);
                         if (savedScroll) {
                             bookContent.scrollTop = parseInt(savedScroll, 10);
-                            console.log('Restored scroll position:', bookContent.scrollTop);
                         }
                     }
 
@@ -195,7 +194,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             const element = document.getElementById(fragment);
                             if (element) {
                                 element.scrollIntoView({ behavior: 'smooth' });
-                                console.log('Scrolled to fragment:', fragment);
                             } else {
                                 console.warn('Fragment not found:', fragment);
                             }
@@ -240,7 +238,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const images = contentDiv.getElementsByTagName('img');
         if (!images || images.length === 0) {
-            console.log('No images found to load');
             return;
         }
 
@@ -296,7 +293,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     if (initialPath) {
-        console.log('Loading initial path:', initialPath);
         loadContent(initialPath);
     }
 });
