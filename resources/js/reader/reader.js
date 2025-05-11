@@ -38,22 +38,23 @@ document.addEventListener('DOMContentLoaded', function() {
             background: #fff;
             box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
             border-radius: 5px;
-            overflow-y: auto;
-            scroll-behavior: smooth;
+            position: relative;
         }
         .book-content {
+            column-count: 2;
+            column-gap: 40px;
+            column-rule: 1px solid #ddd;
+            column-fill: auto;
             height: 100%;
-            padding: 15px;
+            padding: 30px;
+            overflow-y: auto;
             font-family: "Georgia", serif;
             font-size: 16px;
             line-height: 1.8;
             color: #333;
-            text-align: justify;
             background: #fefefe;
-            column-gap: 20px;
-            column-fill: auto;
-            column-count: 2;
-            column-rule: 1px solid #ddd;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+            display: block; /* Ensure content is visible */
         }
         .book-content * {
             display: block; /* Override potential display: none */
@@ -75,21 +76,21 @@ document.addEventListener('DOMContentLoaded', function() {
             margin: 10px 0;
             break-inside: avoid-column;
         }
-        .book-container::-webkit-scrollbar {
+        .book-content::-webkit-scrollbar {
             width: 8px;
         }
-        .book-container::-webkit-scrollbar-thumb {
+        .book-content::-webkit-scrollbar-thumb {
             background: #888;
             border-radius: 4px;
         }
-        .book-container::-webkit-scrollbar-track {
+        .book-content::-webkit-scrollbar-track {
             background: #f1f1f1;
         }
         /* Mobile: One page */
         @media (max-width: 767px) {
             .book-content {
                 column-count: 1;
-                font-size: 14px; /* Smaller font for mobile */
+                font-size: 14px;
             }
         }
     `;
@@ -122,9 +123,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Save scroll position of the current chapter before loading a new one
         if (currentBasePath) {
-            const bookContainer = contentDiv.querySelector('.book-container');
-            if (bookContainer) {
-                localStorage.setItem(`scrollPosition_${bookId}_${currentBasePath}`, bookContainer.scrollTop);
+            const bookContent = contentDiv.querySelector('.book-content');
+            if (bookContent) {
+                localStorage.setItem(`scrollPosition_${bookId}_${currentBasePath}`, bookContent.scrollTop);
             }
         }
 
@@ -172,13 +173,20 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(html => {
                 console.log('Received HTML length:', html.length, 'Sample:', html.substring(0, 50));
-                // Parse HTML with DOMParser to handle XHTML correctly
+                // Parse HTML with DOMParser
                 const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'application/xhtml+xml');
-                const parseError = doc.querySelector('parsererror');
+                let doc = parser.parseFromString(html, 'application/xhtml+xml');
+                let parseError = doc.querySelector('parsererror');
+
+                // Fallback to text/html if XHTML parsing fails
                 if (parseError) {
-                    console.error('HTML parsing error:', parseError.textContent);
-                    throw new Error('Invalid XHTML content');
+                    console.warn('XHTML parsing failed:', parseError.textContent);
+                    doc = parser.parseFromString(html, 'text/html');
+                    parseError = doc.querySelector('parsererror');
+                    if (parseError) {
+                        console.error('HTML parsing error:', parseError.textContent);
+                        throw new Error('Invalid content format');
+                    }
                 }
 
                 // Check for error message
@@ -188,23 +196,28 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Extract body content
                 let bodyContent = '';
-                const body = doc.querySelector('body');
+                let body = doc.querySelector('body');
                 if (body) {
                     bodyContent = body.innerHTML;
+                    console.log('Body content length:', bodyContent.length, 'Sample:', bodyContent.substring(0, 50));
                 } else {
-                    // Fallback: Use all content after <head>, excluding <style> and <title>
+                    console.warn('No <body> tag found, attempting fallback');
                     const htmlElement = doc.querySelector('html');
                     if (htmlElement) {
                         const tempDiv = document.createElement('div');
                         tempDiv.append(...htmlElement.childNodes);
                         tempDiv.querySelectorAll('head, style, title').forEach(el => el.remove());
                         bodyContent = tempDiv.innerHTML;
+                        console.log('Fallback content length:', bodyContent.length, 'Sample:', bodyContent.substring(0, 50));
                     } else {
-                        bodyContent = html; // Last resort
+                        bodyContent = html;
+                        console.log('Last resort content length:', bodyContent.length, 'Sample:', bodyContent.substring(0, 50));
                     }
                 }
 
-                if (!bodyContent || bodyContent.trim() === '') {
+                // Relax empty content check
+                if (!bodyContent) {
+                    console.error('No body content extracted');
                     throw new Error('No valid body content found in response');
                 }
 
@@ -221,7 +234,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 Array.from(links).forEach(link => {
                     let cssPath = link.getAttribute('href');
                     if (!cssPath) return;
-                    // Resolve relative paths based on the current basePath
                     if (!cssPath.startsWith('http') && basePath.includes('/')) {
                         const baseDir = basePath.substring(0, basePath.lastIndexOf('/'));
                         cssPath = `${baseDir}/${cssPath}`.replace(/\/+/g, '/');
@@ -273,44 +285,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 currentBasePath = basePath;
 
-                // Fetch EPUB language for dynamic styling
-                fetch(`/book/${bookId}/language`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
-                    body: JSON.stringify({ token: token })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success && data.language) {
-                        const isBangla = data.language === 'bn';
-                        const fontFamily = isBangla ? '"Noto Serif Bengali", serif' : '"Georgia", serif';
-                        const direction = isBangla ? 'rtl' : 'ltr';
-                        const defaultStyle = document.createElement('style');
-                        defaultStyle.textContent = `
-                            .book-content {
-                                font-family: ${fontFamily};
-                                direction: ${direction};
-                            }
-                        `;
-                        document.head.appendChild(defaultStyle);
-                    }
-                })
-                .catch(error => console.warn('Failed to fetch EPUB language:', error));
-
                 // Ensure DOM is updated before proceeding
                 requestAnimationFrame(() => {
                     loadImages();
 
                     // Restore scroll position
-                    const bookContainer = contentDiv.querySelector('.book-container');
-                    if (bookContainer) {
+                    const bookContent = contentDiv.querySelector('.book-content');
+                    if (bookContent) {
                         const savedScroll = localStorage.getItem(`scrollPosition_${bookId}_${basePath}`);
                         if (savedScroll) {
-                            bookContainer.scrollTop = parseInt(savedScroll, 10);
-                            console.log('Restored scroll position:', savedScroll);
+                            bookContent.scrollTop = parseInt(savedScroll, 10);
+                            console.log('Restored scroll position:', bookContent.scrollTop);
                         }
                     }
 
@@ -331,7 +316,6 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(error => {
                 console.error('Error loading content:', path, error.message);
                 if (retries > 0) {
-                    // Use TOC or fallback paths only if initial fetch fails
                     const fallbackPaths = document.querySelectorAll('a[data-path]');
                     let nextPath = null;
                     if (fallbackPaths.length > 0) {
@@ -341,7 +325,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     if (nextPath && nextPath !== basePath) {
                         console.log('Retrying with next TOC path:', nextPath);
-                        loadContent(nextPath, retries - 1);
+                        loadContent(path, retries - 1);
                     } else {
                         contentDiv.innerHTML = '<h2>Content Not Found</h2><p>The requested content is not available. Please try another chapter.</p>';
                     }
