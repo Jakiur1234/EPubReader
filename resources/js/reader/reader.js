@@ -1,6 +1,7 @@
 document.addEventListener('contextmenu', function(e) {
     e.preventDefault();
 });
+
 document.addEventListener('dragstart', function(e) {
     e.preventDefault();
 });
@@ -37,22 +38,26 @@ document.addEventListener('DOMContentLoaded', function() {
             background: #fff;
             box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
             border-radius: 5px;
-            position: relative;
+            overflow-y: auto;
+            scroll-behavior: smooth;
         }
         .book-content {
-            column-count: 2;
-            column-gap: 40px;
-            column-rule: 1px solid #ddd;
             height: 100%;
-            padding: 30px;
-            overflow-y: auto;
+            padding: 15px;
             font-family: "Georgia", serif;
             font-size: 16px;
             line-height: 1.8;
             color: #333;
             text-align: justify;
             background: #fefefe;
-            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+            column-gap: 20px;
+            column-fill: auto;
+            column-count: 2;
+            column-rule: 1px solid #ddd;
+        }
+        .book-content * {
+            display: block; /* Override potential display: none */
+            visibility: visible; /* Ensure visibility */
         }
         .book-content h1, .book-content h2, .book-content h3 {
             font-family: "Georgia", serif;
@@ -70,15 +75,22 @@ document.addEventListener('DOMContentLoaded', function() {
             margin: 10px 0;
             break-inside: avoid-column;
         }
-        .book-content::-webkit-scrollbar {
+        .book-container::-webkit-scrollbar {
             width: 8px;
         }
-        .book-content::-webkit-scrollbar-thumb {
+        .book-container::-webkit-scrollbar-thumb {
             background: #888;
             border-radius: 4px;
         }
-        .book-content::-webkit-scrollbar-track {
+        .book-container::-webkit-scrollbar-track {
             background: #f1f1f1;
+        }
+        /* Mobile: One page */
+        @media (max-width: 767px) {
+            .book-content {
+                column-count: 1;
+                font-size: 14px; /* Smaller font for mobile */
+            }
         }
     `;
     document.head.appendChild(bookStyles);
@@ -110,9 +122,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Save scroll position of the current chapter before loading a new one
         if (currentBasePath) {
-            const bookContent = contentDiv.querySelector('.book-content');
-            if (bookContent) {
-                localStorage.setItem(`scrollPosition_${bookId}_${currentBasePath}`, bookContent.scrollTop);
+            const bookContainer = contentDiv.querySelector('.book-container');
+            if (bookContainer) {
+                localStorage.setItem(`scrollPosition_${bookId}_${currentBasePath}`, bookContainer.scrollTop);
             }
         }
 
@@ -160,23 +172,99 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(html => {
                 console.log('Received HTML length:', html.length, 'Sample:', html.substring(0, 50));
-                // Sanitize and preserve styles
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = html;
+                // Parse HTML with DOMParser to handle XHTML correctly
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'application/xhtml+xml');
+                const parseError = doc.querySelector('parsererror');
+                if (parseError) {
+                    console.error('HTML parsing error:', parseError.textContent);
+                    throw new Error('Invalid XHTML content');
+                }
 
                 // Check for error message
                 if (html.includes('<h2>Content Not Found</h2>')) {
                     throw new Error('Server returned Content Not Found');
                 }
 
-                // Extract body content and styles
-                const bodyContent = tempDiv.querySelector('body') ? tempDiv.querySelector('body').innerHTML : html;
-                const styles = tempDiv.getElementsByTagName('style');
+                // Extract body content
+                let bodyContent = '';
+                const body = doc.querySelector('body');
+                if (body) {
+                    bodyContent = body.innerHTML;
+                } else {
+                    // Fallback: Use all content after <head>, excluding <style> and <title>
+                    const htmlElement = doc.querySelector('html');
+                    if (htmlElement) {
+                        const tempDiv = document.createElement('div');
+                        tempDiv.append(...htmlElement.childNodes);
+                        tempDiv.querySelectorAll('head, style, title').forEach(el => el.remove());
+                        bodyContent = tempDiv.innerHTML;
+                    } else {
+                        bodyContent = html; // Last resort
+                    }
+                }
+
                 if (!bodyContent || bodyContent.trim() === '') {
                     throw new Error('No valid body content found in response');
                 }
 
-                // Create two-page book layout using CSS columns
+                // Extract and inject styles
+                const styles = doc.querySelectorAll('style');
+                Array.from(styles).forEach(style => {
+                    const styleElement = document.createElement('style');
+                    styleElement.textContent = style.textContent;
+                    document.head.appendChild(styleElement);
+                });
+
+                // Process <link> tags for external CSS
+                const links = doc.querySelectorAll('link[rel="stylesheet"]');
+                Array.from(links).forEach(link => {
+                    let cssPath = link.getAttribute('href');
+                    if (!cssPath) return;
+                    // Resolve relative paths based on the current basePath
+                    if (!cssPath.startsWith('http') && basePath.includes('/')) {
+                        const baseDir = basePath.substring(0, basePath.lastIndexOf('/'));
+                        cssPath = `${baseDir}/${cssPath}`.replace(/\/+/g, '/');
+                    }
+                    const cssFileToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+                    fetch(`/book/${bookId}/store-file-token`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        },
+                        body: JSON.stringify({ path: cssPath, file_token: cssFileToken })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            fetch(`/book/${bookId}/file`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                                },
+                                body: JSON.stringify({ token: token, path: cssPath, file_token: cssFileToken })
+                            })
+                            .then(response => {
+                                if (!response.ok) {
+                                    throw new Error('Failed to load CSS: ' + response.status);
+                                }
+                                return response.text();
+                            })
+                            .then(css => {
+                                const styleElement = document.createElement('style');
+                                styleElement.textContent = css;
+                                document.head.appendChild(styleElement);
+                                console.log('Loaded CSS:', cssPath);
+                            })
+                            .catch(error => console.error('Failed to load CSS:', cssPath, error));
+                        }
+                    })
+                    .catch(error => console.error('Failed to store CSS file token:', cssPath, error));
+                });
+
+                // Render content
                 contentDiv.innerHTML = `
                     <div class="book-container">
                         <div class="book-content">${bodyContent}</div>
@@ -184,15 +272,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 `;
 
                 currentBasePath = basePath;
-
-                // Inject styles if present
-                if (styles.length > 0) {
-                    styles.forEach(style => {
-                        const styleElement = document.createElement('style');
-                        styleElement.textContent = style.textContent;
-                        document.head.appendChild(styleElement);
-                    });
-                }
 
                 // Fetch EPUB language for dynamic styling
                 fetch(`/book/${bookId}/language`, {
@@ -226,12 +305,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     loadImages();
 
                     // Restore scroll position
-                    const bookContent = contentDiv.querySelector('.book-content');
-                    if (bookContent) {
+                    const bookContainer = contentDiv.querySelector('.book-container');
+                    if (bookContainer) {
                         const savedScroll = localStorage.getItem(`scrollPosition_${bookId}_${basePath}`);
                         if (savedScroll) {
-                            bookContent.scrollTop = parseInt(savedScroll, 10);
-                            console.log('Restored scroll position:', bookContent.scrollTop);
+                            bookContainer.scrollTop = parseInt(savedScroll, 10);
+                            console.log('Restored scroll position:', savedScroll);
                         }
                     }
 
@@ -282,7 +361,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function loadImages() {
-        // Ensure contentDiv exists and has content
         if (!contentDiv || !contentDiv.innerHTML) {
             console.warn('Cannot load images: contentDiv is empty or not found');
             return;
@@ -341,6 +419,7 @@ document.addEventListener('DOMContentLoaded', function() {
         link.addEventListener('click', function(e) {
             e.preventDefault();
             const path = this.getAttribute('data-path');
+            console.log('Loading TOC path:', path);
             loadContent(path);
         });
     });

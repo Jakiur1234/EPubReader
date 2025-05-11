@@ -340,6 +340,12 @@ class BooksController
         try {
             $reader = new EpubReader($book->file_path);
             $content = $reader->getFileContent($path);
+            if ($content === null) {
+                Log::error('EpubReader returned null content', [
+                    'book_id' => $id,
+                    'path' => $path,
+                ]);
+            }
             $reader->close();
         } catch (\Exception $e) {
             Log::error('Error accessing EPUB file', [
@@ -398,7 +404,10 @@ class BooksController
                     'book_id' => $id,
                     'path' => $path,
                 ]);
+                $content = '<h2>Content Not Found</h2><p>Failed to parse the requested content.</p>';
+                $mimeType = 'text/html';
             } else {
+                // Process images
                 $images = $dom->getElementsByTagName('img');
                 $basePath = dirname($path) === '.' ? '' : dirname($path);
                 $imageCount = $images->length;
@@ -428,29 +437,36 @@ class BooksController
                     }
                 }
 
+                // Add custom styles
                 $language = $this->getEpubLanguage($book->file_path);
                 $isBangla = ($language === 'bn');
                 $fontFamily = $isBangla ? '"Noto Serif Bengali", serif' : '"Helvetica", sans-serif';
-                $direction = 'rtl';
+                // Set direction based on language (RTL for Arabic, Urdu, etc.; LTR otherwise)
+                $direction = in_array($language, ['ar', 'ur', 'fa']) ? 'rtl' : 'ltr';
                 $styleContent = "img { max-width: 100%; height: auto; } body { font-family: $fontFamily; font-size: 16px; line-height: 1.6; direction: $direction; }";
                 $style = $dom->createElement('style', $styleContent);
                 $head = $dom->getElementsByTagName('head')->item(0);
                 if ($head) {
                     $head->appendChild($style);
+                } else {
+                    // Create a head element if it doesn't exist
+                    $head = $dom->createElement('head');
+                    $dom->documentElement->insertBefore($head, $dom->getElementsByTagName('body')->item(0));
+                    $head->appendChild($style);
                 }
 
-                // Extract only the body content
-                $body = $dom->getElementsByTagName('body')->item(0);
-                if ($body) {
-                    $content = '';
-                    foreach ($body->childNodes as $node) {
-                        $content .= $dom->saveHTML($node);
-                    }
+                // Preserve the full HTML document
+                if ($isXhtml) {
+                    $content = $dom->saveXML();
                 } else {
                     $content = $dom->saveHTML();
                 }
             }
         }
+
+        Log::debug('Final content length', [
+            'content' => strlen($content),
+        ]);
 
         return response($content, 200)
             ->header('Content-Type', $mimeType)
