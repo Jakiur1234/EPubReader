@@ -1,0 +1,91 @@
+#chapter-content {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    height: 80vh;
+    width: 90%;
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 20px;
+    background: #f5f5f5;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.book-container {
+    width: 100%;
+    height: 100%;
+    background: #fff;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+    position: relative;
+}
+
+.book-content {
+    column-count: 2;
+    column-gap: 40px;
+    column-rule: 1px solid #ddd;
+    column-fill: auto;
+    height: 100%;
+    padding: 30px;
+    overflow-y: auto;
+    font-family: "Georgia", serif;
+    font-size: 16px;
+    line-height: 1.8;
+    color: #333;
+    background: #fefefe;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+    display: block;
+    /* Ensure content is visible */
+}
+
+.book-content * {
+    display: block;
+    /* Override potential display: none */
+    visibility: visible;
+    /* Ensure visibility */
+}
+
+.book-content h1,
+.book-content h2,
+.book-content h3 {
+    font-family: "Georgia", serif;
+    color: #222;
+    margin-bottom: 15px;
+    break-after: avoid-column;
+}
+
+.book-content p {
+    margin-bottom: 15px;
+    break-inside: avoid-column;
+}
+
+.book-content img {
+    max-width: 100%;
+    height: auto;
+    margin: 10px 0;
+    break-inside: avoid-column;
+}
+
+.book-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.book-content::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.book-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+/* Mobile: One page */
+@media (max-width: 767px) {
+    .book-content {
+        column-count: 1;
+        font-size: 14px;
+    }
+}

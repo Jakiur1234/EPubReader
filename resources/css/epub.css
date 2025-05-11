@@ -1,0 +1,32 @@
+@import '@fortawesome/fontawesome-free/css/all.min.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.page-transition {
+    transition: all 0.3s ease;
+}
+
+.sidebar-transition {
+    transition: transform 0.3s ease;
+}
+
+.theme-light {
+    background-color: #f8f8f8;
+    color: #333;
+}
+
+.theme-sepia {
+    background-color: #f4ecd8;
+    color: #5b4636;
+}
+
+.theme-dark {
+    background-color: #1a1a1a;
+    color: #e6e6e6;
+}
+
+.theme-nature {
+    background-color: #edf7ed;
+    color: #1a331a;
+}

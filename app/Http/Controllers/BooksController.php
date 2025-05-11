@@ -118,7 +118,7 @@ class BooksController
             'initial_path' => $initial_path,
         ]);
 
-        return view('books.show', compact('book', 'toc', 'token', 'initial_path', 'initial_file_token'));
+        return view('epub', compact('book', 'toc', 'token', 'initial_path', 'initial_file_token'));
     }
 
     protected function generateFallbackTOC($book)
