@@ -298,20 +298,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Inject page styles
-    const styleElement = document.createElement('style');
-    styleElement.textContent = `
-        .page {
-            max-width: 60vw;
-            border: 1px solid #ccc;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-sizing: border-box;
-            overflow: hidden;
-        }
-    `;
-    document.head.appendChild(styleElement);
-
     document.querySelectorAll('a[data-path]').forEach(link => {
         link.addEventListener('click', function(e) {
             e.preventDefault();
